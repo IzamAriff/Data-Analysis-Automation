@@ -142,6 +142,24 @@ def test_classification_run_flow():
     assert cls["accuracy"] > cls["baseline_accuracy"]
 
 
+def test_every_chart_type_renders():
+    """Cycle through all chart types on both samples via the real widget."""
+    at = _fresh_app()
+    at.run()
+    at.button(key="load_sample").click().run()
+    at.button(key="confirm_explore").click().run()
+    for chart_type in ["Trend", "Distribution", "Comparison", "Relationship", "Composition", "Correlation"]:
+        at.segmented_control(key="chart_type").set_value(chart_type)
+        at.run()
+        assert not at.exception, f"chart type {chart_type} raised"
+    # Composition pie style (exercises the px.pie branch).
+    at.segmented_control(key="chart_type").set_value("Composition")
+    at.run()
+    at.radio(key="c_comp_kind").set_value("pie")
+    at.run()
+    assert not at.exception
+
+
 def test_forecast_run_flow():
     at = _fresh_app()
     at.run()
