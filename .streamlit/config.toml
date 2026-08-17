@@ -1,0 +1,16 @@
+[theme]
+base = "light"
+primaryColor = "#0072B2"      # Okabe-Ito blue (colorblind-safe)
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F4F6F9"
+textColor = "#1A1C23"
+font = "sans serif"
+
+[server]
+headless = true
+address = "0.0.0.0"
+port = 8501
+maxUploadSize = 300           # MB — hard cap for uploaded files (loader enforces 250 MB)
+
+[browser]
+gatherUsageStats = false
