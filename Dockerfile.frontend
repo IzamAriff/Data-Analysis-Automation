@@ -2,7 +2,9 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 COPY frontend/package*.json ./
-RUN npm ci
+# No package-lock.json is committed; use `npm install` (not `npm ci`) so the
+# image builds cleanly. Swap to `npm ci` if a lockfile is ever added.
+RUN npm install
 COPY frontend/ ./
 RUN npm run build
 
