@@ -1,142 +1,188 @@
-# 📊 DataPilot — Automated Data Analysis Studio
+# 📊 DataPilot — Automated Data Analysis Studio (Fullstack Rebuild)
 
-> A self-serve, interactive web application that **profiles, visualises, diagnoses and models any tabular dataset** — no hard-coded column names, no code required from the user.
+> **Fullstack rebuild — commit `3e2ebb4`**  
+> A self-serve, interactive platform that **profiles, visualises, diagnoses and models any tabular dataset** — no hard-coded column names, no code required.
 
 Upload a CSV/Excel/Parquet/JSON file (or paste a URL), and DataPilot automatically:
-
-1. **Detects everything it can about the data** — encoding, delimiter, date columns, numeric columns stored as formatted strings (e.g. `$1,234.50`), categorical vs. free-text vs. ID columns.
-2. **Profiles data quality** — row/column counts, duplicate rows, missing-value percentages, per-column statistics and a data dictionary.
-3. **Builds an interactive dashboard** — KPI cards, time trends, distributions, comparisons, relationships, compositions, correlation heatmaps — all driven by dynamic sidebar filters.
-4. **Runs diagnostics** — correlation analysis with p-values, ANOVA/Kruskal–Wallis group comparisons, chi-square + Cramér's V association tests, IQR outlier detection.
+1. **Detects everything it can about the data** — encoding, delimiter, date columns, numeric columns stored as formatted strings (`$1,234.50`), categorical vs. free-text vs. ID columns.
+2. **Profiles data quality** — row/column counts, duplicate rows, missing-value %, per-column stats and a data dictionary.
+3. **Builds an interactive dashboard** — KPI cards, time trends, distributions, comparisons, relationships, compositions, correlation heatmaps — all driven by backend filters.
+4. **Runs diagnostics** — correlation with p-values, ANOVA/Kruskal–Wallis, chi-square + Cramér's V, IQR outlier detection.
 5. **Fits predictive models on demand** — regression, classification, k-means clustering, and time-series forecasting, each with cross-validated metrics, baselines and stated assumptions.
-6. **Exports everything** — filtered CSV downloads, chart downloads (PNG/HTML), the auto-generated data dictionary, and a reproducible Markdown report.
+6. **Exports everything** — filtered CSV, chart PNG/HTML, data dictionary, reproducible Markdown report.
 
 ---
 
-## 🚀 Quick start (local)
+## 🏗️ Architecture — Fullstack Rebuild (3e2ebb4)
 
-```bash
-git clone https://github.com/IzamAriff/Data-Analysis-Automation.git
-cd Data-Analysis-Automation
+This branch refactors the original Streamlit monolith (`app.py`) into a clean **FastAPI backend + React frontend** while keeping 100% of the battle-tested core logic in `src/`.
 
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-
-streamlit run app.py
+```
+Data-Analysis-Automation/
+├── backend/                    # FastAPI service (new)
+│   ├── app/
+│   │   ├── main.py             # FastAPI entry, CORS, health
+│   │   ├── config.py           # 12-factor settings
+│   │   ├── models/schemas.py   # Pydantic v2 schemas
+│   │   ├── routers/
+│   │   │   ├── data.py         # upload / url / samples / prepare
+│   │   │   ├── profile.py      # role overrides, data dictionary
+│   │   │   ├── analysis.py     # KPI, correlations, ANOVA, chi2, outliers, trend
+│   │   │   ├── modeling.py     # regression, classification, clustering, forecast
+│   │   │   └── plots.py        # Plotly JSON for frontend
+│   │   └── services/
+│   │       ├── session_store.py # in-memory TTL store (dataset_id → df)
+│   │       └── data_service.py  # wrappers around src/* modules
+│   └── requirements.txt
+│
+├── frontend/                   # React + Vite + Tailwind + Plotly.js (new)
+│   ├── src/
+│   │   ├── api/client.ts       # axios client for /api/v1
+│   │   ├── components/
+│   │   │   ├── UploadZone.tsx
+│   │   │   ├── ProfileTable.tsx
+│   │   │   ├── KPICards.tsx
+│   │   │   ├── ChartBuilder.tsx
+│   │   │   ├── Diagnostics.tsx
+│   │   │   ├── ModelingPanel.tsx
+│   │   │   └── FilterSidebar.tsx
+│   │   ├── pages/
+│   │   │   ├── Landing.tsx
+│   │   │   └── Dashboard.tsx
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   ├── vite.config.ts
+│   ├── tailwind.config.js
+│   └── package.json
+│
+├── src/                        # Core domain logic (unchanged, reused 100%)
+│   ├── loader.py
+│   ├── profile.py
+│   ├── analysis.py
+│   ├── modeling.py
+│   ├── plots.py
+│   └── ui.py (legacy helpers)
+│
+├── app.py                      # Legacy Streamlit monolith (still works)
+├── data/                       # Bundled samples
+├── tests/                      # pytest
+├── docker-compose.yml          # backend + frontend + legacy
+├── Dockerfile.backend
+├── Dockerfile.frontend
+├── Dockerfile                  # legacy Streamlit
+└── Makefile
 ```
 
-Then open the printed URL (usually **http://localhost:8501**). No database, no API keys, no configuration needed.
-
-> **Try it instantly:** click **“🎁 Sample dataset → 🚀 Load sample data”** on the landing screen to explore the bundled *Sample Superstore* retail dataset (9,994 orders) or the *Video Game Sales* dataset (16,595 titles).
-
----
-
-## 📂 Data requirements
-
-| Format | Extensions | Notes |
-|---|---|---|
-| Delimited text | `.csv`, `.tsv`, `.txt`, `.dat` | Delimiter & encoding detected automatically (`utf-8` → `latin-1` → `cp1252`) |
-| Excel | `.xlsx`, `.xlsm`, `.xls` | Multi-sheet workbooks: pick the sheet to analyse after loading |
-| Parquet | `.parquet`, `.pq` | Read via PyArrow |
-| JSON | `.json` | Records or JSON-lines |
-
-- **Maximum file size: 250 MB** (uploads and URLs).
-- Tabular data works best; each column should be a single variable, each row an observation.
-- Missing values are fine — charts skip them per column, models impute them (see below).
-- **Privacy:** data never leaves your machine; everything runs in your browser session, and nothing is uploaded to any server (unless you deploy the app yourself).
+### Why this split?
+- **Backend** is stateless-ish: `dataset_id` in-memory store (TTL 1h), idempotent preparation, all heavy lifting in `src/`. Easy to scale, test, document via `/docs`.
+- **Frontend** is modern React: file drop, sample browser, editable role table, dynamic chart builder (Plotly), diagnostics & modeling panels — all talking to `/api/v1/*` via axios.
+- **Core `src/`** remains pure functions, no Streamlit dependency, so both frontends reuse it.
 
 ---
 
-## 🧭 How to use the app
+## 🚀 Quick start
+
+### Option A — Docker (recommended)
+```bash
+docker-compose up --build
+# frontend → http://localhost:5173
+# backend  → http://localhost:8000/docs
+# legacy Streamlit (optional) → docker-compose --profile legacy up
+```
+
+### Option B — Local dev (two terminals)
+```bash
+# terminal 1 — backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# terminal 2 — frontend
+cd frontend
+npm ci
+npm run dev
+# open http://localhost:5173
+```
+
+### Option C — Legacy Streamlit (still supported)
+```bash
+streamlit run app.py
+# http://localhost:8501
+```
+
+> **Try instantly:** on the React UI click **“🎁 Browse samples”** → pick Superstore (9,994 rows) or vgsales (16,595 rows).
+
+---
+
+## 🔌 API Reference
+
+Base: `/api/v1`
+
+| Group | Method | Endpoint | Description |
+|-------|--------|----------|-------------|
+| data | GET | `/data/samples` | List bundled samples |
+| data | POST | `/data/upload` | Upload file → `dataset_id` |
+| data | POST | `/data/url` | Load from URL |
+| data | POST | `/data/sample/{label}` | Load bundled sample |
+| data | POST | `/data/prepare` | Prepare + infer roles |
+| profile | POST | `/profile/override` | Override column roles |
+| profile | GET | `/profile/dictionary/{id}` | Data dictionary |
+| analysis | POST | `/analysis/kpi` | KPI snapshot |
+| analysis | POST | `/analysis/correlation` | Correlation matrix + top pairs |
+| analysis | POST | `/analysis/group-stats` | Per-group stats |
+| analysis | POST | `/analysis/anova` | ANOVA/Kruskal-Wallis |
+| analysis | POST | `/analysis/chi-square` | Chi-square + Cramér's V |
+| analysis | POST | `/analysis/outliers` | IQR outlier summary |
+| analysis | POST | `/analysis/trend` | Time aggregation |
+| modeling | POST | `/modeling/regression` | 5-fold CV regression |
+| modeling | POST | `/modeling/classification` | RF classification |
+| modeling | POST | `/modeling/clustering` | k-means + elbow/silhouette |
+| modeling | POST | `/modeling/forecast` | Holt-Winters forecast |
+| plots | POST | `/plots/generate` | Plotly JSON for any chart |
+
+Full OpenAPI docs at `http://localhost:8000/docs`.
+
+---
+
+## 🧭 How to use (React frontend)
 
 ### 1. Load data
-Choose **Upload a file**, **From a URL**, or a bundled **Sample dataset**. All parsing steps are logged and shown to you.
+Upload, URL, or sample. Backend returns `dataset_id` + notes.
 
-### 2. Review the profile
-DataPilot shows row/column counts, duplicates, missing cells, memory use and the **inferred role of every column** (`date`, `year`, `numeric`, `binary`, `boolean`, `category`, `text`, `id`). You can override any role before continuing — roles drive the entire app.
+### 2. Review profile
+See row/column counts, duplicates, missing %, memory, **inferred roles** (`date`, `year`, `numeric`, `binary`, `boolean`, `category`, `text`, `id`). Override any role → Save.
 
-### 3. Explore the dashboard
-- **📊 Overview** — filter-aware KPI cards, data-quality chart, column roles, descriptive statistics and the full preprocessing log.
-- **📈 Charts** — a chart builder with *Auto* mode: trend, distribution, comparison, relationship, composition and correlation charts, each with PNG/HTML download.
-- **🔎 Diagnostics** — correlation matrix + strongest pairs, ANOVA/Kruskal–Wallis group comparisons with box plots, chi-square association tests, outlier detection.
-- **🤖 Predictive** — pick a target and press *Run*:
-  - *Regression* — linear + random forest, 5-fold cross-validated R²/RMSE/MAE vs. a mean baseline, feature importances, actual-vs-predicted chart.
-  - *Classification* — random forest, stratified 5-fold CV accuracy & macro-F1 vs. a majority-class baseline, confusion matrix, feature importances (max 20 classes).
-  - *Clustering* — k-means over standardised features with elbow & silhouette plots, PCA projection and cluster profiles.
-  - *Forecasting* — Holt–Winters exponential smoothing (automatic seasonality) with a holdout MAPE vs. a naive baseline and a confidence band.
-- **📚 Data Dictionary** — auto-generated per-column dictionary (role, type, description, missing %, examples) — downloadable.
-- **🗂️ Raw Data** — browse the filtered rows, choose columns, download CSV.
-- **📄 Report** — one-click reproducible Markdown summary of the whole session.
+### 3. Explore dashboard
+- **Overview** — KPI cards, data-quality, column roles, descriptive stats, preprocessing log.
+- **Charts** — builder (trend, distribution, comparison, relationship, composition, correlation) — Plotly JSON from backend rendered with `react-plotly.js`.
+- **Diagnostics** — correlation matrix + strongest pairs, ANOVA box prep, chi-square contingency, outlier detection.
+- **Predictive** — target + Run: regression & classification (5-fold CV + baselines), k-means, forecasting with holdout MAPE.
 
-### Sidebar filters (dynamic per dataset)
-Date-range sliders, year sliders, category multi-selects, numeric range sliders and free-text search — all generated from the inferred column roles. Empty selections mean “no filter”. A one-click reset restores the full data. If filters match no rows you get a friendly notice instead of a crash.
+Filters are sent as `FilterStateSchema` with every request — backend applies them server-side before analysis.
 
 ---
 
 ## 🧹 Preprocessing (documented & reproducible)
 
-Every transformation is recorded and shown in the **preprocessing log** on the Overview tab (and in the report):
-
-1. **Column-name cleanup** — whitespace trimmed, duplicate names suffixed.
-2. **Fully-empty rows removed**; **exact duplicate rows** dropped by default (optional).
-3. **Datetime parsing** — string columns where ≥90 % of sampled values parse as dates are converted (pure 4-digit years are kept as years).
-4. **Numeric-string parsing** — currency/percentage strings (`$1,234.50`, `12,5 %`) are converted to numbers.
-5. **Missing values for models** — your choice, applied to modelling only:
-   - `median` (default) / `mean` — impute numeric features; categoricals get a `(missing)` level;
-   - `drop` — discard incomplete rows.
-6. **Model encoding** — categorical features one-hot encoded (top 20 levels per column, the rest binned to `(other)`); dates converted to days since the earliest date; ID/text columns excluded (logged).
-
-Charts and descriptive statistics always skip missing values per column; no rows are silently invented.
+1. Column-name cleanup — whitespace trimmed, duplicate names suffixed.
+2. Fully-empty rows removed; duplicate rows dropped by default.
+3. Datetime parsing — ≥90 % of sampled values parse as dates → datetime (pure 4-digit years kept as years).
+4. Numeric-string parsing — `$1,234.50`, `12,5 %` → numbers.
+5. Missing values for models — `median`/`mean`/`drop`; categoricals get `(missing)` level.
+6. Model encoding — one-hot top 20 levels per column → `(other)` for rest; dates → days since earliest; ID/text excluded (logged).
 
 ---
 
-## 🧠 Analysis methods & honest reporting
+## 🧠 Methods & honest reporting
 
-- **Cross-validation** — regression/classification metrics come from 5-fold CV: every row is scored by a model that never saw it. A naive baseline (mean / majority class) is always shown so “good” is never a matter of scale.
-- **Hypothesis tests** — ANOVA with Levene-driven fallback to Kruskal–Wallis (effect size η² reported); chi-square with Cramér's V; correlation p-values derived from the t-distribution.
-- **Assumptions & limitations** are stated in an expander under every model (linearity, independence, class imbalance, causality vs. association, forecast uncertainty).
-- Results describe **association, not causation**, and the app tells users when a model fails to beat its baseline.
+- 5-fold CV: every row scored by model that never saw it. Naive baseline always shown.
+- Hypothesis tests: Levene → ANOVA or Kruskal-Wallis (η²), chi-square + Cramér's V, correlation p-values from t-dist.
+- Assumptions stated under every model; association ≠ causation; app reports when model fails to beat baseline.
 
-### Findings on the bundled demo data (Sample Superstore)
+### Findings on bundled Sample Superstore (same as legacy)
 
 | Analysis | Result |
 |---|---|
-| Monthly Sales trend | 48 months, strong growth + year-end seasonality |
-| Sales ↔ Profit correlation | r = 0.48, p < 0.001 (moderate) |
-| Sales by Region (ANOVA) | **No significant difference** (p = 0.49) — regions are balanced |
-| Segment ↔ Ship Mode | Statistically associated (p < 0.001) but weak (Cramér's V = 0.04) |
-| Profit outliers | ~19 % of orders outside the IQR bounds (heavy-tailed target) |
-| Forecast monthly Sales | Holt–Winters holdout MAPE **22.6 % vs. naive 97.3 %** |
-| Regression: Profit from Sales/Quantity/Discount/Category | RF R² ≈ 0.64 (CV) vs. mean baseline — profit is noisy but learnable |
-| Classification: Category | 74.6 % accuracy vs. 60.3 % baseline |
-| Classification: Segment | Model does **not** beat the majority baseline — the app reports this honestly |
-
----
-
-## 📦 Project structure
-
-```
-Data-Analysis-Automation/
-├── app.py                    # Streamlit entry point (UI orchestration)
-├── requirements.txt          # Pinned dependencies (Python 3.11 validated)
-├── README.md
-├── Dockerfile                # Optional containerised deployment
-├── .streamlit/config.toml    # Theme + server settings
-├── data/                     # Bundled public demo datasets
-│   ├── sample_superstore.csv          # Tableau "Sample Superstore" (9,994 rows)
-│   └── sample_video_game_sales.csv    # "Video Game Sales" / vgsales (16,595 rows)
-├── src/
-│   ├── loader.py             # Ingestion: encoding/delimiter/date detection, URL safety
-│   ├── profile.py            # Column-role inference, profiling, data dictionary
-│   ├── analysis.py           # Descriptive stats, correlations, hypothesis tests
-│   ├── modeling.py           # Regression, classification, clustering, forecasting
-│   ├── plots.py              # Colorblind-safe Plotly chart builders
-│   └── ui.py                 # Dynamic filters, KPI cards, download buttons
-└── tests/
-    ├── test_modules.py       # Unit tests for every analytics module
-    └── test_app.py           # End-to-end tests via Streamlit's AppTest harness
-```
 
 ---
 
@@ -144,51 +190,79 @@ Data-Analysis-Automation/
 
 ```bash
 pytest tests/ -v
+cd frontend && npm run build  # type-check + production build
 ```
 
-- **Unit tests** cover parsing edge cases (encodings, delimiters, JSON), role inference on both samples, statistics, every model family, chart builders and the filter logic.
-- **AppTest end-to-end tests** drive the real `app.py`: load both samples, confirm the profile step, apply date/category/numeric/search filters, reset them, and run all four predictive model flows — asserting no exceptions and sane metrics.
+- Unit tests cover parsing edge cases, role inference, stats, every model family, chart builders, filter logic.
+- AppTest E2E drives legacy `app.py`: load both samples, profile, filters, all four model flows.
+- New backend can be tested via `/docs` → Try it out, or via `curl`/axios.
+
+---
+
+## 📦 Project structure (full)
+
+```
+Data-Analysis-Automation/
+├── backend/app/            # FastAPI
+├── frontend/src/           # React
+├── src/                    # Core analytics (shared)
+├── app.py                  # Legacy Streamlit entry
+├── data/                   # Demo datasets
+├── tests/
+├── docker-compose.yml
+├── Dockerfile.backend
+├── Dockerfile.frontend
+├── Dockerfile (legacy)
+├── Makefile
+└── README.md
+```
 
 ---
 
 ## ☁️ Deployment
 
-### Streamlit Community Cloud (recommended, free)
-1. Push this repository to GitHub.
-2. Go to [share.streamlit.io](https://share.streamlit.io) → **New app** → pick the repo, branch and `app.py`.
-3. Deploy. Requirements are installed automatically.
-
-### Hugging Face Spaces
-1. Create a new **Space** with the *Streamlit* SDK.
-2. Push this repository to the Space (it reads `requirements.txt` and `app.py` automatically).
-
-### Internal server
+### Docker Compose (any VM)
 ```bash
-docker build -t datapilot .
-docker run -p 8501:8501 datapilot
+docker-compose up --build -d
 ```
-or run under any WSGI-capable host with `streamlit run app.py --server.port 8501`.
 
-**Note on chart PNG export:** server-side PNG export uses Kaleido, which needs Chrome. On headless servers run `kaleido_get_chrome` once; otherwise the app automatically offers an interactive **HTML download** whose Plotly toolbar can still save the chart as PNG.
+### Streamlit Cloud (legacy)
+Push repo, pick `app.py`.
+
+### Hugging Face Spaces (legacy)
+New Space → Streamlit SDK → push repo.
+
+### Internal server — backend only
+```bash
+docker build -f Dockerfile.backend -t datapilot-backend .
+docker run -p 8000:8000 datapilot-backend
+```
 
 ---
 
 ## 🔒 Security & robustness
 
-- URL loading is restricted to `http(s)`, with a 30-second timeout and a 250 MB cap; credentials are stripped from any displayed URL.
-- Uploads are parsed only by format-specific readers (never pickled/executed); Excel readers do not run macros.
-- Free-text search uses literal matching (`regex=False`) — no regex-injection surface.
-- No user input is ever `eval`/`exec`-ed; column names are sanitised before use.
-- Files use **relative paths** only; runtime logs go to `logs/app.log`.
-- Per-section error handling keeps the app alive and shows friendly messages instead of stack traces.
+- URL loading restricted to `http(s)`, timeout 30s, 250 MB cap; credentials stripped.
+- Uploads parsed only by format-specific readers; never pickled/executed; Excel macros not run.
+- Text search literal (`regex=False`).
+- No `eval`/`exec`; column names sanitised.
+- Per-section error handling in backend → 400 with safe message; 500 logged.
+- CORS configurable via `CORS_ORIGINS`.
 
 ## 🎨 Accessibility
 
-- Colorblind-safe palettes throughout: Okabe–Ito for categorical series, Cividis for sequential scales, BrBG for diverging scales.
-- Hover tooltips, labelled axes, readable font sizes and clear legends on all charts.
+- Okabe-Ito categorical palette, Cividis sequential, BrBG diverging.
+- Plotly hover tooltips, labelled axes, readable fonts, legends.
 
 ## 📚 Dataset provenance
 
-- `sample_superstore.csv` — the public Tableau **“Sample – Superstore”** dataset (© Tableau, widely redistributed for learning purposes).
-- `sample_video_game_sales.csv` — the public **“Video Game Sales” (vgsales)** dataset compiled from VGChartz data.
-Both are bundled only as convenient, clearly-labelled demo data — your own files never leave your session.
+- `sample_superstore.csv` — Tableau “Sample – Superstore” (public, learning purposes).
+- `sample_video_game_sales.csv` — public “Video Game Sales (vgsales)” from VGChartz.
+
+Both bundled only as clearly-labelled demo data — your own files never leave your session (or your deployment).
+
+---
+
+## 📝 Commit history
+
+- `3e2ebb4` — **Fullstack rebuild**: FastAPI backend + React frontend + Docker Compose, 100% reuse of `src/` core, legacy Streamlit kept, updated docs/tests.
